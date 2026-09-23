@@ -8,33 +8,33 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from plateforms.iLab.format_convert import convert_sr_to_md
-from plateforms.iLab.request_utils import (
+from format_convert import convert_sr_to_md
+from request_utils import (
     filter_service_requests,
     get_cores,
     get_request_description,
     get_request_info,
     select_service_request,
 )
-from reporting.build_ppt import convert_md_to_ppt
+
 
 # -----------------------------------------------------------------------------#
 # IMPORT GENERIC UTILS
 # -----------------------------------------------------------------------------#
-from utils.utils import convert_date, set_default_cutoff_dates
+from utils import convert_date, set_default_cutoff_dates
 
 # -----------------------------------------------------------------------------#
 # SET ENV VARS
 # -----------------------------------------------------------------------------#
 # dotenv_path = Path.cwd() / "env" / ".ilab.env"
 # Yes I know this is hardcoded - will change later
-dotenv_path = (Path(__file__).resolve().parent / "../../../env/.env").resolve()
+dotenv_path = (Path(__file__).resolve().parent / "../env/.env").resolve()
 load_dotenv(dotenv_path=dotenv_path)
 
 
-API_KEY = os.getenv("ILAB_KEY", "")
-BASE_URL = os.getenv("ILAB_DOMAIN", "")
-CORE_LOC = os.getenv("DEFAULT_CORE_LOCATION", "v1/cores")
+API_KEY = os.getenv("API_KEY", "")
+BASE_URL = os.getenv("BASE_URL", "")
+CORE_LOC = os.getenv("CORE_LOC", "v1/cores")
 
 CORE_ID = os.getenv("CORE_ID", "")
 CORE_NAME = os.getenv("CORE_NAME", "")
@@ -79,11 +79,6 @@ examples:
             "Output file location "
             "if none provide default names will be used in current directory."
         ),
-    )
-    parser.add_argument(
-        "--build_report",
-        action="store_true",
-        help="Should the full report be built? Used for testing purposes",
     )
     parser.add_argument(
         "--export_request",
@@ -133,7 +128,5 @@ if __name__ == "__main__":
                 )
                 for i in current_requests
             ]
-
             convert_sr_to_md(request_info, request_description, rt, outfile)
-        if args.build_report:
-            convert_md_to_ppt(f"{outfile}.md", f"{outfile}.ppt")
+        
