@@ -1,0 +1,35 @@
+[project]
+name = "timekeeper"
+version = "0.1.0"
+description = "Timekeeper - nightly pull from iLAB"
+requires-python = ">=3.13"
+
+dependencies = [
+    "requests",
+    "python-dotenv",
+]
+
+dev = [
+    "seaborn",
+    "jupyterlab",
+    "ipython",
+    "ipykernel",
+    "ruff",
+    "detect-secrets",
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "responses"
+]
+
+[build-system]
+requires = ["setuptools>=65", "wheel", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
