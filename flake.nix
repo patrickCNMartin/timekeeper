@@ -42,7 +42,7 @@
 
                         if [ -f "pyproject.toml" ]; then
                             echo "====> Syncing deps (incl. dev tooling) <===="
-                            uv sync --extra dev
+                            uv sync
                         fi
                     '';
                 };
