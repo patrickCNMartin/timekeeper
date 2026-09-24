@@ -62,6 +62,14 @@ def select_service_request(
     return all_requests
 
 
+def full_sr(service_request:list, headers) -> list:
+    counter = 1
+    for sr in service_request:
+        print(f"Processing service request: {counter}")
+        sr['forms'] = get_custom_forms(sr,headers)
+        counter += 1
+    return service_request
+
 # simple quick function
 # will probably use a data base to run more complex commands
 # Allow AND OR stuff and potentially easier to push towards kantele later
@@ -108,6 +116,7 @@ def get_custom_forms(service_request, headers, form="all"):
     response = requests.get(custom_form_action, headers=headers)
     response.raise_for_status()
     forms = trim_response(response.json(), "custom_forms")
+    
     if form == "all":
         return forms
     else:

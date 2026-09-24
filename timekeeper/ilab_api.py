@@ -15,6 +15,7 @@ from request_utils import (
     get_request_description,
     get_request_info,
     select_service_request,
+    full_sr
 )
 
 
@@ -107,6 +108,10 @@ if __name__ == "__main__":
     service_requests = select_service_request(
         BASE_URL, CORE_LOC, HEADERS, CORE_ID, DATE_RANGE, filters=FILTER_CRITERIA
     )
+    full = full_sr(service_requests, HEADERS)
+    with open(f"{outfile}_full.json", "w") as f:
+        json.dump(full,f)
+        
     # Not ideal but for now I don't care to much about it
     if args.export_request:
         with open(f"{outfile}.json", "w") as f:
