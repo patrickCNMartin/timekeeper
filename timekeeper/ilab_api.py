@@ -98,16 +98,15 @@ if __name__ == "__main__":
     # need to update this function
     if CORE_ID is None or CORE_ID == "":
         CORE_ID = get_cores(BASE_URL, CORE_LOC, HEADERS, "id")
-    # Building report by converting to md then to ppt or which ever format is required
-    if args.outfile is None:
-        outfile = "file_out"
-    else:
-        outfile = args.outfile
+
+    # Require arg 
+    outfile = args.outfile
     # API filtering is limited
     # Function does addition filtering based on post request json
     service_requests = select_service_request(
         BASE_URL, CORE_LOC, HEADERS, CORE_ID, DATE_RANGE, filters=FILTER_CRITERIA
     )
+    # Adds custom form to each service request and dumps the lot.
     full = full_sr(service_requests, HEADERS)
     with open(f"{outfile}_full.json", "w") as f:
         json.dump(full,f)
