@@ -68,6 +68,7 @@ def full_sr(service_request:list, headers) -> list:
     for sr in service_request:
         print(f"Processing service request: {counter}")
         sr['forms'] = get_custom_forms(sr,headers)
+        sr['milestones'] = get_milestones(sr,headers)
         counter += 1
     return service_request
 
@@ -189,6 +190,15 @@ def get_custom_forms(service_request, headers, form="all"):
         else:
             return form_list
 
+
+def get_milestones(service_request, headers):
+    """Get custom form associated with a specific service ID"""
+    custom_milestone_action = service_request["actions"]["list_milestones"]["url"]
+    response = requests.get(custom_milestone_action, headers=headers)
+    response.raise_for_status()
+    milestones = trim_response(response.json(), "object")
+    return milestones
+    
 
 def get_request_info(
     service_request,

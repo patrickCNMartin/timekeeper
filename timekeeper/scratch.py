@@ -4,25 +4,16 @@
 import argparse
 import json
 import os
+import requests
+
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-from format_convert import convert_sr_to_md
-from request_utils import (
-    filter_service_requests,
-    get_cores,
-    get_request_description,
-    get_request_info,
-    select_service_request,
-    full_sr
-)
-
-
 # -----------------------------------------------------------------------------#
 # IMPORT GENERIC UTILS
 # -----------------------------------------------------------------------------#
 from utils import convert_date, set_default_cutoff_dates
+from request_utils import select_service_request
 
 # -----------------------------------------------------------------------------#
 # SET ENV VARS
@@ -61,6 +52,11 @@ HEADERS = {
 
 
 # -----------------------------------------------------------------------------#
+# DEFINE SEARCH
+# -----------------------------------------------------------------------------#
+
+
+# -----------------------------------------------------------------------------#
 # DEFINE ARGUMENTS
 # -----------------------------------------------------------------------------#
 def parse_args():
@@ -74,19 +70,13 @@ examples:
     )
     parser.add_argument(
         "--outfile",
-        required=True,
+        required=False,
         type=str,
         help=(
             "Output file location "
             "if none provide default names will be used in current directory."
         ),
     )
-    parser.add_argument(
-        "--export_request",
-        action="store_true",
-        help="Export the full API request as json",
-    )
-
     return parser.parse_args()
 
 
@@ -95,42 +85,76 @@ examples:
 # -----------------------------------------------------------------------------#
 if __name__ == "__main__":
     args = parse_args()
-    # need to update this function
-    if CORE_ID is None or CORE_ID == "":
-        CORE_ID = get_cores(BASE_URL, CORE_LOC, HEADERS, "id")
-
-    # Require args 
     outfile = args.outfile
-    # API filtering is limited
-    # Function does addition filtering based on post request json
-    service_requests = select_service_request(
-        BASE_URL, CORE_LOC, HEADERS, CORE_ID, DATE_RANGE, filters=FILTER_CRITERIA
-    )
-    # Adds custom form to each service request and dumps the lot.
-    full = full_sr(service_requests, HEADERS)
-    with open(f"{outfile}_full.json", "w") as f:
-        json.dump(full,f)
+
+    # Get all cores
+    all_cores_url = f"{BASE_URL}/v1/cores"
+    ac = requests.get(
+            url = all_cores_url,
+            headers=HEADERS,
+        )
+    ac.raise_for_status()
+    ac_resp = ac.json()
+    with open("data/cores.json", 'w') as f:
+        json.dump(ac_resp,f)
+
+    # Get single core
+    s_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}"
+    sc = requests.get(
+            url = s_cores_url,
+            headers=HEADERS,
+        )
+    sc.raise_for_status()
+    sc_resp = sc.json()
+    with open("data/single_cores.json", 'w') as s:
+        json.dump(sc_resp,s)
+
+    # Get services
+    sr_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/services.json"
+    sr = requests.get(
+            url = sr_cores_url,
+            headers=HEADERS,
+        )
+    sr.raise_for_status()
+    sr_resp = sr.json()
+    with open("data/service_list.json", 'w') as r:
+        json.dump(sr_resp,r)
+
+    # Get equipment
+    eq_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/equipment.json"
+    eq = requests.get(
+            url = eq_cores_url,
+            headers=HEADERS,
+        )
+    eq.raise_for_status()
+    eq_resp = eq.json()
+    with open("data/equipment_list.json", 'w') as e:
+        json.dump(eq_resp,e)
+
+    # Get service requests
+    srl_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/service_requests.json"
+    srl = requests.get(
+            url = srl_cores_url,
+            headers=HEADERS,
+        )
+    srl.raise_for_status()
+    srl_resp = srl.json()
+    with open("data/service_request_list.json", 'w') as sr:
+        json.dump(srl_resp,sr)
+
+    # Get milestone
+    test_request = 955420
+    srow_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/service_requests/{test_request}/milestones.json"
+    srow = requests.get(
+            url = srow_cores_url,
+            headers=HEADERS,
+        )
+    srow.raise_for_status()
+    srow_resp = srow.json()
+    with open("data/service_row.json", 'w') as sro:
+        json.dump(srow_resp,sro)  
+
+    
+    
         
-    # Not ideal but for now I don't care to much about it
-    if args.export_request:
-        with open(f"{outfile}.json", "w") as f:
-            json.dump(service_requests, f)
-    else:
-        # Loop over request types to create a multi-type report
-        # This will append to the same md file
-        for rt in REQUEST_TYPE:
-            # import pdb;pdb.set_trace()
-            current_requests = filter_service_requests(service_requests, rt)
-            # Pull information from request
-            request_info = [get_request_info(i) for i in current_requests]
-            # Pull Desription
-            request_description = [
-                get_request_description(
-                    i,
-                    HEADERS,
-                    rt,
-                )
-                for i in current_requests
-            ]
-            convert_sr_to_md(request_info, request_description, rt, outfile)
-        
+    

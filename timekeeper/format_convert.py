@@ -65,3 +65,9 @@ def convert_sr_to_md(
             md_local = convert_to_md(sr, sd, request_type)
             f.writelines(md_local)
     return 0
+
+
+
+# This is one of those times where having a arg dict will be useful I guess
+def extract_project_info(service_request:list):
+    return 0
