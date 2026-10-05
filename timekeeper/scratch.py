@@ -95,7 +95,7 @@ if __name__ == "__main__":
         )
     ac.raise_for_status()
     ac_resp = ac.json()
-    with open("data/cores.json", 'w') as f:
+    with open("data/core_test.json", 'w') as f:
         json.dump(ac_resp,f)
 
     # Get single core
@@ -106,10 +106,10 @@ if __name__ == "__main__":
         )
     sc.raise_for_status()
     sc_resp = sc.json()
-    with open("data/single_cores.json", 'w') as s:
+    with open("data/single_cores_test.json", 'w') as s:
         json.dump(sc_resp,s)
 
-    # Get services
+    # # Get services
     sr_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/services.json"
     sr = requests.get(
             url = sr_cores_url,
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     with open("data/service_list.json", 'w') as r:
         json.dump(sr_resp,r)
 
-    # Get equipment
+    # # Get equipment
     eq_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/equipment.json"
     eq = requests.get(
             url = eq_cores_url,
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     with open("data/equipment_list.json", 'w') as e:
         json.dump(eq_resp,e)
 
-    # Get service requests
+    # # Get service requests
     srl_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/service_requests.json"
     srl = requests.get(
             url = srl_cores_url,
@@ -139,20 +139,20 @@ if __name__ == "__main__":
         )
     srl.raise_for_status()
     srl_resp = srl.json()
-    with open("data/service_request_list.json", 'w') as sr:
+    with open("data/service_request_list_postsub.json", 'w') as sr:
         json.dump(srl_resp,sr)
 
-    # Get milestone
-    test_request = 955420
-    srow_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/service_requests/{test_request}/milestones.json"
-    srow = requests.get(
-            url = srow_cores_url,
-            headers=HEADERS,
-        )
-    srow.raise_for_status()
-    srow_resp = srow.json()
-    with open("data/service_row.json", 'w') as sro:
-        json.dump(srow_resp,sro)  
+    # # Get milestone
+    # test_request = 955420
+    # srow_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/service_requests/{test_request}/milestones.json"
+    # srow = requests.get(
+    #         url = srow_cores_url,
+    #         headers=HEADERS,
+    #     )
+    # srow.raise_for_status()
+    # srow_resp = srow.json()
+    # with open("data/service_row.json", 'w') as sro:
+    #     json.dump(srow_resp,sro)  
 
     
     

@@ -2155,6 +2155,7 @@ name = "timekeeper"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "pandas" },
     { name = "python-dotenv" },
     { name = "requests" },
 ]
@@ -2175,6 +2176,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "pandas" },
     { name = "python-dotenv" },
     { name = "requests" },
 ]

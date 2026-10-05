@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "requests",
     "python-dotenv",
+    "pandas"
 ]
 
 [dependency-groups]
