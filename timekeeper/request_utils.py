@@ -6,14 +6,14 @@ import requests
 # -----------------------------------------------------------------------------#
 # IMPORT GENERIC UTILS
 # -----------------------------------------------------------------------------#
-from utils import trim_response
+from timekeeper_utils import trim_response
 
 
 # -----------------------------------------------------------------------------#
 # DEF FUNCTIONS
 # -----------------------------------------------------------------------------#
-def get_cores(base_url, core_loc, headers, return_info: str = "all"):
-    response = requests.get(f"{base_url}/{core_loc}.json", headers=headers)
+def get_cores(base_url, headers, return_info: str = "all"):
+    response = requests.get(f"{base_url}.json", headers=headers)
     response.raise_for_status()
     cores = trim_response(response.json(), "cores")
     match return_info:
@@ -34,7 +34,6 @@ def get_cores(base_url, core_loc, headers, return_info: str = "all"):
 # Could be worth creating a local database that will be used
 def select_service_request(
     base_url,
-    core_loc,
     headers,
     core_id: int,
     date_range: None | dict = None,
@@ -50,7 +49,7 @@ def select_service_request(
             params["to_date"] = date_range["to_date"]
             params["from_date"] = date_range["from_date"]
         filtered_response = requests.get(
-            f"{base_url}/{core_loc}/{core_id}/service_requests.json",
+            f"{base_url}/{core_id}/service_requests.json",
             headers=headers,
             params=params,
         )
@@ -242,6 +241,8 @@ def get_field_labels(form_name: str = "new"):
             ]
         case "assigned":
             return ["BACKGROUND_OF_PROJECT_", "TYPE_OF_SAMPLES", "Number_of_samples_"]
+        case "all":
+            return get_field_labels("new") + get_field_labels("assigned")
         case _:
             raise ValueError("Unknown form request")
     return 0
@@ -254,15 +255,16 @@ def get_request_description(
 ):
     form_name = get_form_request(request_type)
     field_labels = get_field_labels(request_type)
-    form = get_custom_forms(service_request, headers, form_name)
+    forms = get_custom_forms(service_request, headers, form_name)
+    # get_custom_forms returns one form (dict), several (list) or none (empty)
+    forms = [forms] if "fields" in forms else forms
 
-    if len(form) == 0:
-        return "No Description \n"
-
-    fields = form["fields"]
     # there is a cleaner way of doing this - but it will do for now.
     field_info = {
-        fi["label"]: fi["value"] for fi in fields if fi["identifier"] in field_labels
+        fi["label"]: fi["value"]
+        for form in forms
+        for fi in form["fields"]
+        if fi["identifier"] in field_labels
     }
 
-    return field_info
+    return field_info or "No Description \n"

@@ -21,7 +21,7 @@ from request_utils import (
 # -----------------------------------------------------------------------------#
 # IMPORT GENERIC UTILS
 # -----------------------------------------------------------------------------#
-from utils import convert_date, set_default_cutoff_dates
+from timekeeper.timekeeper_utils import convert_date, set_default_cutoff_dates
 
 # -----------------------------------------------------------------------------#
 # SET ENV VARS

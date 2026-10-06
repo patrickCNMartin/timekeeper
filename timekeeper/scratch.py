@@ -12,8 +12,8 @@ from dotenv import load_dotenv
 # -----------------------------------------------------------------------------#
 # IMPORT GENERIC UTILS
 # -----------------------------------------------------------------------------#
-from utils import convert_date, set_default_cutoff_dates
-from request_utils import select_service_request
+from timekeeper_utils import convert_date, set_default_cutoff_dates, format_response,trim_response
+
 
 # -----------------------------------------------------------------------------#
 # SET ENV VARS
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     outfile = args.outfile
 
     # Get all cores
-    all_cores_url = f"{BASE_URL}/v1/cores"
+    all_cores_url = f"{BASE_URL}"
     ac = requests.get(
             url = all_cores_url,
             headers=HEADERS,
@@ -99,7 +99,7 @@ if __name__ == "__main__":
         json.dump(ac_resp,f)
 
     # Get single core
-    s_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}"
+    s_cores_url = f"{BASE_URL}/{CORE_ID}"
     sc = requests.get(
             url = s_cores_url,
             headers=HEADERS,
@@ -110,7 +110,7 @@ if __name__ == "__main__":
         json.dump(sc_resp,s)
 
     # # Get services
-    sr_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/services.json"
+    sr_cores_url = f"{BASE_URL}/{CORE_ID}/services.json"
     sr = requests.get(
             url = sr_cores_url,
             headers=HEADERS,
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         json.dump(sr_resp,r)
 
     # # Get equipment
-    eq_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/equipment.json"
+    eq_cores_url = f"{BASE_URL}/{CORE_ID}/equipment.json"
     eq = requests.get(
             url = eq_cores_url,
             headers=HEADERS,
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         json.dump(eq_resp,e)
 
     # # Get service requests
-    srl_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/service_requests.json"
+    srl_cores_url = f"{BASE_URL}/{CORE_ID}/service_requests.json"
     srl = requests.get(
             url = srl_cores_url,
             headers=HEADERS,
@@ -142,18 +142,23 @@ if __name__ == "__main__":
     with open("data/service_request_list_postsub.json", 'w') as sr:
         json.dump(srl_resp,sr)
 
-    # # Get milestone
-    # test_request = 955420
-    # srow_cores_url = f"{BASE_URL}/v1/cores/{CORE_ID}/service_requests/{test_request}/milestones.json"
-    # srow = requests.get(
-    #         url = srow_cores_url,
-    #         headers=HEADERS,
-    #     )
-    # srow.raise_for_status()
-    # srow_resp = srow.json()
-    # with open("data/service_row.json", 'w') as sro:
-    #     json.dump(srow_resp,sro)  
+    # # testing updates to request
+    # # hard coded for now 
+    # put_url = "https://api-eu.ilabsolutions.com/v1/cores/3655/service_requests/959258.json"
+    # put = requests.put(
+    #     url = put_url,
+    #     headers=HEADERS,
+    #     json={"service_request": {"state": "completed"}})
+    # print("Status Code:", put.status_code)
 
+    # print("Response Body:", put.content.decode())
+    
+    # testing reformat for table insertion
+    FIELDS = ['name','id','state','submitted_at','start_on','end_on','assigned_to','service_name','owner.name']
+    serv = trim_response(srl_resp, 'service_requests')
+    df = format_response(serv,fields=FIELDS)
+    import pdb; pdb.set_trace()
+    
     
     
         

@@ -28,7 +28,9 @@ def request_type_title(request_type):
         case "new":
             return "# New Service Requests \n"
         case "assigned":
-            return "# Assigned Requets \n"
+            return "# Assigned Requests \n"
+        case "all":
+            return "# Service Requests \n"
         case _:
             raise ValueError("Unknown request type")
     return 0
