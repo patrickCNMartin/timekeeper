@@ -1,8 +1,5 @@
 import re
-from difflib import get_close_matches
-
 import requests
-
 # -----------------------------------------------------------------------------#
 # IMPORT GENERIC UTILS
 # -----------------------------------------------------------------------------#
@@ -12,27 +9,10 @@ from timekeeper_utils import trim_response
 # -----------------------------------------------------------------------------#
 # DEF FUNCTIONS
 # -----------------------------------------------------------------------------#
-def get_cores(base_url, headers, return_info: str = "all"):
-    response = requests.get(f"{base_url}.json", headers=headers)
-    response.raise_for_status()
-    cores = trim_response(response.json(), "cores")
-    match return_info:
-        case "all":
-            return cores
-        # Potentially use a filter dict instead
-        # Tha assumption is you don't know what the core info is
-        case "id":
-            return [i["id"] for i in cores]
-        case "name":
-            return [n["name"] for n in cores]
-        case _:
-            raise ValueError("Unknown information to return")
-
-
 # This is only for API selection and filtering
 # Very limited filtering logic
 # Could be worth creating a local database that will be used
-def select_service_request(
+def get_service_requests(
     base_url,
     headers,
     core_id: int,
@@ -62,7 +42,7 @@ def select_service_request(
     return all_requests
 
 
-def full_sr(service_request:list, headers) -> list:
+def add_forms(service_request:list, headers) -> list:
     counter = 1
     for sr in service_request:
         print(f"Processing service request: {counter}")
@@ -71,106 +51,91 @@ def full_sr(service_request:list, headers) -> list:
         counter += 1
     return service_request
 
-def collect_keys(obj, keys: set | None = None) -> set:
-    """Recursively collect every dict key in a nested dict/list structure"""
-    if keys is None:
-        keys = set()
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            keys.add(k)
-            collect_keys(v, keys)
-    elif isinstance(obj, list):
-        for item in obj:
-            collect_keys(item, keys)
-    return keys
 
-
-def find_keys(obj, search_terms: list) -> list:
-    """Recursively return {key: value} for every key found in search_terms"""
-    found = []
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            if k in search_terms:
-                found.append({k: v})
-            found.extend(find_keys(v, search_terms))
-    elif isinstance(obj, list):
-        for item in obj:
-            found.extend(find_keys(item, search_terms))
-    return found
-
-
-def search_service(
-    service_request: list | dict,
-    search_terms: list,
-    return_element: bool = False,
-    fuzzy: bool = False,
-    cutoff: float = 0.6,
-) -> list:
-    """Recursively search service requests for keys matching search_terms
-
-    return_element=True returns the top-level elements (dicts) containing a match,
-    otherwise returns a list of {key: value} for every match.
-    fuzzy=True replaces each term with the closest existing key (0 < cutoff <= 1).
-    """
-    if isinstance(service_request, dict):
-        service_request = [service_request]
-    if fuzzy:
-        all_keys = list(collect_keys(service_request))
-        search_terms = [
-            match
-            for term in search_terms
-            for match in get_close_matches(term, all_keys, n=1, cutoff=cutoff)
-        ]
-    search_element = []
-    for sr in service_request:
-        found = find_keys(sr, search_terms)
-        if not found:
-            continue
-        if return_element:
-            search_element.append(sr)
+def sort_service_requests(service_requests: list)->dict:
+    # Hardcoded fields for Proteomics core iLAB
+    sorted_requests = {
+        'drafts' : [],
+        'startup_meeting_unassigned': [],
+        'startup_meeting_assigned': [],
+        'supplementary_sample_assigned' : [],
+        'supplementary_sample_unassigned' : [],
+        'processing' : [],
+        'completed' : []}
+    for sr in service_requests:
+        if sr is is_draft(sr):
+            sorted_requests['drafts'] = sorted_requests['drafts'].append(sr)
+        elif sr is is_unassigned_meeting(sr):
+            sorted_requests['startup_meeting_unassigned'] = sorted_requests['startup_meeting_unassigned'].append(sr)
+        elif sr is is_assigned_meeting(sr):
+            sorted_requests['startup_meeting_assigned'] = sorted_requests['startup_meeting_assigned'].append(sr)
+        elif sr is is_unassigned_supplementary_samples(sr):
+            sorted_requests['supplementary_sample_unassigned'] = sorted_requests['supplementary_sample_unassigned'].append(sr)
+        elif sr is is_assigned_supplementary_samples(sr):
+            sorted_requests['supplementary_sample_assigned'] = sorted_requests['supplementary_sample_assigned'].append(sr)
         else:
-            search_element.extend(found)
-    return search_element
+            #For now skip what is not listed 
+            continue
+    return sorted_requests
+
+# Select only what is needed for the meetings
+FIELDS = ['name','description','state','submitted_at','start_on','end_on','assigned_to','service_name','owner.name']
 
 
-# simple quick function
-# will probably use a data base to run more complex commands
-# Allow AND OR stuff and potentially easier to push towards kantele later
-def filter_service_requests(service_requests: list, request_type: str = "new") -> list:
-    match request_type:
-        case "new":
-            service_requests = is_assgined(service_requests, assigned=False)
-        case "assigned":
-            service_requests = is_assgined(service_requests, assigned=True)
-        case "all":
-            service_requests = service_requests
-        case _:
-            raise ValueError("Unknow request type")
-    service_requests = is_unlinked(service_requests)
-    service_requests = is_active(service_requests)
-    return service_requests
+def get_base_fields(d: dict, fields: list[str] = FIELDS) -> dict:
+    def get(v, keys):
+        return v if not keys else get(v.get(keys[0]), keys[1:]) if isinstance(v, dict) else None
+    return {f: get(d, f.split(".")) for f in fields}
+
+def extract_forms(service_requests:dict, form: str)-> dict:
+    form_info = {}
+    startup_form_fields = [i for i in service_requests["forms"] if i["name"] == form]
+    for i in startup_form_fields[0]:
+        form_info[i["name"]] = i["value"]
+    return form_info
 
 
-def is_unlinked(service_request):
-    service_request = [sr for sr in service_request if not re.search("CID", sr["name"])]
-    return service_request
 
-
-def is_active(service_request):
-    service_request = [
-        sr
-        for sr in service_request
-        if sr["state"] not in ["cancelled", "research_draft"]
-    ]
-    return service_request
-
-
-def is_assgined(service_request, assigned: bool = False) -> list:
-    if assigned:
-        status = [sr for sr in service_request if sr["assigned_to"]]
+def is_draft(service_request:dict)-> dict:
+    if re.search('draft',service_request['state']):
+        draft = get_base_fields(service_request)
+        return draft
     else:
-        status = [sr for sr in service_request if not sr["assigned_to"]]
-    return status
+        return None
+
+def is_unassigned_meeting(service_request:dict) -> dict:
+    if service_request['service_name'] == "Start-up meeting" and service_request['assigned_to'] is None:
+        unassigned_meeting = get_base_fields(service_request)
+        unassigned_meeting = unassigned_meeting.update(extract_forms(service_request, "Start-up Meeting Request form"))
+        return unassigned_meeting
+    else:
+        return None
+
+def is_assigned_meeting(service_request:dict) -> dict:
+    if service_request['service_name'] == "Start-up meeting" and service_request['assigned_to'] is not None:
+        assigned_meeting = get_base_fields(service_request)
+        assigned_meeting = assigned_meeting.update(extract_forms(service_request, "Start-up Meeting Request form"))
+        return assigned_meeting
+    else:
+        return None
+
+def is_unassigned_supplementary_samples(service_request:dict) -> dict:
+    if service_request['service_name'] == "Supplementary sample submission" and service_request['assigned_to'] is None:
+        unassigned_supplementary = get_base_fields(service_request)
+        unassigned_supplementary = unassigned_supplementary.update(extract_forms(service_request, "Additional Sample Submission Form"))
+        return unassigned_supplementary
+    else:
+        return None
+
+def is_assigned_supplementary_samples(service_request:dict) -> dict:
+    if service_request['service_name'] == "Supplementary sample submission" and service_request['assigned_to'] is not None:
+        assigned_supplementary = get_base_fields(service_request)
+        assigned_supplementary = assigned_supplementary.update(extract_forms(service_request, "Additional Sample Submission Form"))
+        return assigned_supplementary
+    else:
+        return False
+
+
 
 
 def get_custom_forms(service_request, headers, form="all"):
@@ -218,53 +183,3 @@ def get_request_info(
     }
 
 
-def get_form_request(form_name: str = "Start-up Meeting Request form"):
-    match form_name:
-        case "new":
-            return "Start-up Meeting Request form"
-        case "assigned":
-            return "Meeting protocol"
-        case "all":
-            return "all"
-        case _:
-            raise ValueError("Unknown form request")
-    return 0
-
-
-def get_field_labels(form_name: str = "new"):
-    match form_name:
-        case "new":
-            return [
-                "What_is_the_background_of_your_project_and_the_aim_with_the_analysis_",
-                "What_type_of_samples_do_you_have__species__blood_or_tissue__pellet_or_gel__etc__",
-                "how_many_samples_would_you_analyze_",
-            ]
-        case "assigned":
-            return ["BACKGROUND_OF_PROJECT_", "TYPE_OF_SAMPLES", "Number_of_samples_"]
-        case "all":
-            return get_field_labels("new") + get_field_labels("assigned")
-        case _:
-            raise ValueError("Unknown form request")
-    return 0
-
-
-def get_request_description(
-    service_request,
-    headers,
-    request_type: str = "new",
-):
-    form_name = get_form_request(request_type)
-    field_labels = get_field_labels(request_type)
-    forms = get_custom_forms(service_request, headers, form_name)
-    # get_custom_forms returns one form (dict), several (list) or none (empty)
-    forms = [forms] if "fields" in forms else forms
-
-    # there is a cleaner way of doing this - but it will do for now.
-    field_info = {
-        fi["label"]: fi["value"]
-        for form in forms
-        for fi in form["fields"]
-        if fi["identifier"] in field_labels
-    }
-
-    return field_info or "No Description \n"

@@ -70,6 +70,3 @@ def convert_sr_to_md(
 
 
 
-# This is one of those times where having a arg dict will be useful I guess
-def extract_project_info(service_request:list):
-    return 0

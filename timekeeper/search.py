@@ -12,9 +12,8 @@ from dotenv import load_dotenv
 
 
 from request_utils import (
-    get_cores,
     select_service_request,
-    full_sr,
+    add_forms,
 )
 
 
@@ -142,6 +141,70 @@ def search_service(
     return search_element
 
 
+
+def collect_keys(obj, keys: set | None = None) -> set:
+    """Recursively collect every dict key in a nested dict/list structure"""
+    if keys is None:
+        keys = set()
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            keys.add(k)
+            collect_keys(v, keys)
+    elif isinstance(obj, list):
+        for item in obj:
+            collect_keys(item, keys)
+    return keys
+
+
+def find_keys(obj, search_terms: list) -> list:
+    """Recursively return {key: value} for every key found in search_terms"""
+    found = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in search_terms:
+                found.append({k: v})
+            found.extend(find_keys(v, search_terms))
+    elif isinstance(obj, list):
+        for item in obj:
+            found.extend(find_keys(item, search_terms))
+    return found
+
+
+def search_service(
+    service_request: list | dict,
+    search_terms: list,
+    return_element: bool = False,
+    fuzzy: bool = False,
+    cutoff: float = 0.6,
+) -> list:
+    """Recursively search service requests for keys matching search_terms
+
+    return_element=True returns the top-level elements (dicts) containing a match,
+    otherwise returns a list of {key: value} for every match.
+    fuzzy=True replaces each term with the closest existing key (0 < cutoff <= 1).
+    """
+    if isinstance(service_request, dict):
+        service_request = [service_request]
+    if fuzzy:
+        all_keys = list(collect_keys(service_request))
+        search_terms = [
+            match
+            for term in search_terms
+            for match in get_close_matches(term, all_keys, n=1, cutoff=cutoff)
+        ]
+    search_element = []
+    for sr in service_request:
+        found = find_keys(sr, search_terms)
+        if not found:
+            continue
+        if return_element:
+            search_element.append(sr)
+        else:
+            search_element.extend(found)
+    return search_element
+
+
+
 # -----------------------------------------------------------------------------#
 # DEFINE ARGUMENTS
 # -----------------------------------------------------------------------------#
@@ -207,9 +270,7 @@ if __name__ == "__main__":
     else:
         fuzzy = False
     # need to update this function
-    if CORE_ID is None or CORE_ID == "":
-        CORE_ID = get_cores(BASE_URL, CORE_LOC, HEADERS, "id")
-
+    
     if os.path.isfile(f"{outfile}.json"):
         with open(f"{outfile}.json",'r') as f:
             service_requests = json.load(f)
@@ -217,7 +278,7 @@ if __name__ == "__main__":
         service_requests = select_service_request(
             BASE_URL, CORE_LOC, HEADERS, CORE_ID, DATE_RANGE, filters=FILTER_CRITERIA
         )
-        service_requests = full_sr(service_requests, HEADERS)
+        service_requests = add_forms(service_requests, HEADERS)
         with open(f"{outfile}.json", 'w') as f:
             json.dump(service_requests,f)
 
