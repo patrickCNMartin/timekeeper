@@ -47,6 +47,17 @@ def get_service_requests(
     return all_requests
 
 
+def filter_by_submitted_date(service_requests: list, date_range: dict) -> list:
+    """Keep the requests submitted within date_range.
+    The API date search runs on a creation date it does not return, not on submitted_at"""
+    from_date = datetime.fromisoformat(date_range["from_date"])
+    to_date = datetime.fromisoformat(date_range["to_date"])
+    return [
+        sr for sr in service_requests
+        if sr["submitted_at"] and from_date <= datetime.fromisoformat(sr["submitted_at"]) <= to_date
+    ]
+
+
 def add_forms(service_request:list, headers) -> list:
     counter = 1
     for sr in service_request:
@@ -57,38 +68,85 @@ def add_forms(service_request:list, headers) -> list:
     return service_request
 
 
+# Hardcoded fields for Proteomics core iLAB
+STARTUP_MEETING = "Start-up meeting"
+SUPPLEMENTARY_SAMPLE = "Supplementary sample submission"
+# Supplementary form: the request it follows up on, and how many new samples
+PREVIOUS_REQUEST_FIELD = (
+    "You are attempting to submit new sample batches, similar to a previous request you've had with us."
+    " Please give us the iLab request ID for your previous request:"
+)
+NEW_SAMPLES_FIELD = "Number of samples:"
+
+
+# One rule per bin: what it takes for a service request to belong there
+def is_draft(service_request: dict) -> bool:
+    return 'draft' in service_request['state']
+
+def is_cancelled(service_request: dict) -> bool:
+    # Cancelled, or rejected (by the core, in disagreement, or on financials)
+    return service_request['state'] in ('cancelled', 'core_disagreement', 'disagreement', 'financials_rejected')
+
+def is_processing(service_request: dict) -> bool:
+    return service_request['state'] == 'processing'
+
+def is_completed(service_request: dict) -> bool:
+    return service_request['state'] == 'completed'
+
+def is_unassigned_meeting(service_request: dict) -> bool:
+    return service_request['service_name'] == STARTUP_MEETING and not service_request['assigned_to']
+
+def is_assigned_meeting(service_request: dict) -> bool:
+    return service_request['service_name'] == STARTUP_MEETING and bool(service_request['assigned_to'])
+
+def is_unassigned_supplementary_samples(service_request: dict) -> bool:
+    return service_request['service_name'] == SUPPLEMENTARY_SAMPLE and not service_request['assigned_to']
+
+def is_assigned_supplementary_samples(service_request: dict) -> bool:
+    return service_request['service_name'] == SUPPLEMENTARY_SAMPLE and bool(service_request['assigned_to'])
+
+
+# Checked top to bottom, first match wins: (bin, rule, form to pull)
+# State rules sit above the service rules so e.g. a rejected meeting is 'cancelled'
+RULES = [
+    ('drafts', is_draft, None),
+    ('cancelled', is_cancelled, None),
+    ('processing', is_processing, None),
+    ('completed', is_completed, None),
+    ('startup_meeting_unassigned', is_unassigned_meeting, "Start-up Meeting Request form"),
+    ('startup_meeting_assigned', is_assigned_meeting, "Start-up Meeting Request form"),
+    ('supplementary_sample_assigned', is_assigned_supplementary_samples, "Additional Sample Submission Form"),
+    ('supplementary_sample_unassigned', is_unassigned_supplementary_samples, "Additional Sample Submission Form"),
+]
+
+# Bins in output order (json, csv and slides)
+BINS = [
+    'drafts',
+    'startup_meeting_unassigned',
+    'startup_meeting_assigned',
+    'supplementary_sample_assigned',
+    'supplementary_sample_unassigned',
+    'processing',
+    'completed',
+    'cancelled',
+]
+
+
 def sort_service_requests(service_requests: list)->dict:
-    # Hardcoded fields for Proteomics core iLAB
-    sorted_requests = {
-        'drafts' : [],
-        'startup_meeting_unassigned': [],
-        'startup_meeting_assigned': [],
-        'supplementary_sample_assigned' : [],
-        'supplementary_sample_unassigned' : [],
-        'processing' : [],
-        'completed' : [],
-        'cancelled' : []}
-    
-    # service name -> (bucket prefix, form to pull)
-    services = {
-        "Start-up meeting": ("startup_meeting", "Start-up Meeting Request form"),
-        "Supplementary sample submission": ("supplementary_sample", "Additional Sample Submission Form"),
-    }
-    # State decides first, then service type; anything not listed is skipped
+    sorted_requests = {name: [] for name in BINS}
+    # Anything that matches no rule is skipped
     for sr in service_requests:
-        fields = get_base_fields(sr)
-        if 'draft' in sr['state']:
-            sorted_requests['drafts'].append(fields)
-        elif sr['state'] in ('processing', 'completed', 'cancelled'):
-            sorted_requests[sr['state']].append(fields)
-        elif sr['service_name'] in services:
-            prefix, form = services[sr['service_name']]
-            assigned = 'assigned' if sr['assigned_to'] else 'unassigned'
-            sorted_requests[f'{prefix}_{assigned}'].append(fields | extract_forms(sr, form))
+        for name, rule, form in RULES:
+            if rule(sr):
+                fields = get_base_fields(sr)
+                if form:
+                    fields |= extract_forms(sr, form)
+                sorted_requests[name].append(fields)
+                break
     return sorted_requests
 
 # Select only what is needed for the meetings
-FIELDS = ['name','description','state','submitted_at','start_on','end_on','assigned_to','service_name','owner.name']
+FIELDS = ['name','assigned_to','state','submitted_at','service_name','owner.name']
 
 
 def get_base_fields(d: dict, fields: list[str] = FIELDS) -> dict:
@@ -129,7 +187,7 @@ def get_milestones(service_request, headers):
     response.raise_for_status()
     milestones = trim_response(response.json(), "object")
     return milestones
-    
+
 
 def get_request_info(
     service_request,
@@ -163,14 +221,20 @@ def convert_date(date: str):
 def set_default_cutoff_dates(start_date: str, how_long: dict):
     if re.search(r"\btoday\b", start_date, re.IGNORECASE):
         today = datetime.now(timezone.utc)
-        today = today + relativedelta(days=1)
     else:
         raise ValueError("Can only search from today")
     delta = relativedelta(**how_long)
     cut_off = today - delta
-    today = today.isoformat(timespec="milliseconds")
+    # to_date is tomorrow so that today's requests are included
+    tomorrow = today + relativedelta(days=1)
+    tomorrow = tomorrow.isoformat(timespec="milliseconds")
     cut_off = cut_off.isoformat(timespec="milliseconds")
-    return {"to_date": today, "from_date": cut_off}
+    return {"to_date": tomorrow, "from_date": cut_off}
+
+
+def to_local_date(timestamp: str):
+    """Day of an iLab timestamp in this machine's time zone (iLab sends them in UTC-4/-5)"""
+    return datetime.fromisoformat(timestamp).astimezone().date()
 
 # -----------------------------------------------------------------------------#
 # FORMAT & OUTPUT UTILS
@@ -178,50 +242,63 @@ def set_default_cutoff_dates(start_date: str, how_long: dict):
 
 # Columns that only exist in the summary table; they start empty
 REPORT_METRICS = [
-    'Name of responsible',
-    'Project Name',
-    'Nr of samples and quant (DIA, TMT, DDA)',
+    'Number of Samples',
+    "Quant",
     'Sample type',
-    'Request',
-    'Meeting',
-    'Approved/sent quote after meeting',
-    'Samples position in the freezer (frezer name, shelf, rack, box, etc)',
-    'Sample in Freezer',
-    'Sample prep',
-    'MS',
-    'Search',
-    'Data searched',
-    'Data sent',
+    'Request Date',
+    'Meeting Date',
+    'Approved Quote Date',
+    'Sample Location',
+    'Sample in Freezer Date',
+    'Processing',
+    'MS Search',
+    'Search Completed Date',
+    'Completion Date',
 ]
 
 
 def format_response(sorted_requests: dict, report_metrics: list[str] = REPORT_METRICS) -> pd.DataFrame:
-    """sort_service_requests output as a DataFrame: base fields, 'type' (the bucket), empty report_metrics"""
+    """sort_service_requests output as a DataFrame: base fields, 'submission_date'
+    (local day of submitted_at), 'type' (the bucket), empty report_metrics"""
     rows = [
         {f: sr[f] for f in FIELDS} | {"type": bucket}
         for bucket, srs in sorted_requests.items() for sr in srs
     ]
-    return pd.DataFrame(rows, columns=[*FIELDS, "type", *report_metrics])
+    df = pd.DataFrame(rows, columns=[*FIELDS, "type", *report_metrics])
+    df.insert(df.columns.get_loc("submitted_at") + 1, "submission_date", df["submitted_at"].map(to_local_date))
+    return df
 
 
-def convert_sr_to_md(sorted_requests: dict, outfile: str = "file_out"):
-    """Write sort_service_requests output to md: one '#' slide per request"""
+# Bins that only show these fields as bullets, in this order
+BIN_BULLETS = dict.fromkeys(
+    ('supplementary_sample_assigned', 'supplementary_sample_unassigned'),
+    ("submitted_at", "service_name", NEW_SAMPLES_FIELD, PREVIOUS_REQUEST_FIELD),
+)
+# Shorter bullet labels for long form questions
+BULLET_LABELS = {PREVIOUS_REQUEST_FIELD: "Previous request"}
+
+
+def convert_sr_to_md(sorted_requests: dict, outfile: str = "file_out", bins: list[str] | None = None):
+    """Write sort_service_requests output to md: one '#' slide per request.
+    bins: which bins to write, in that order; all of them if None"""
     in_subtitle = ("name", "owner.name", "state", "assigned_to")
     with open(f"{outfile}.md", "w") as f:
-        for bucket, bucket_requests in sorted_requests.items():
-            for sr in bucket_requests:
+        for bucket in bins or sorted_requests:
+            for sr in sorted_requests[bucket]:
                 f.write(f"# {bucket.replace('_', ' ').capitalize()}\n")
                 f.write(
                     f"## {sr['name']} - {sr['owner.name']}"
                     f" - {sr['state'].replace('_', ' ')}"
-                    f" - {', '.join(sr['assigned_to']) or '?'}\n"
+                    f" - {', '.join(sr['assigned_to']) or 'Unassigned'}\n"
                 )
-                # ponytail: every non-empty field is a bullet, long forms overflow
-                # a slide; pick fields per bucket when that matters
+                # Show the local day of submission, not the raw iLab timestamp
+                submitted = to_local_date(sr["submitted_at"])
+                shown = sr | {"submitted_at": f"{submitted:%B} {submitted.day}, {submitted.year}"}
+                # Every non-empty field is a bullet, unless the bin picks its own in BIN_BULLETS
                 f.writelines(
-                    f"* **{key}** {' '.join(str(value).split())}\n"
-                    for key, value in sr.items()
-                    if value and key not in in_subtitle
+                    f"* **{BULLET_LABELS.get(key, key)}** {' '.join(str(shown[key]).split())}\n"
+                    for key in BIN_BULLETS.get(bucket, shown)
+                    if shown.get(key) and key not in in_subtitle
                 )
 
 

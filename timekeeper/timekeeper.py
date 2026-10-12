@@ -14,6 +14,7 @@ from timekeeper_utils import (
     convert_date,
     set_default_cutoff_dates,
     get_service_requests,
+    filter_by_submitted_date,
     add_forms,
     sort_service_requests,
     convert_sr_to_md,
@@ -35,8 +36,12 @@ CORE_NAME = os.getenv("CORE_NAME", "")
 
 
 TO_DATE = os.getenv("TO_DATE", "today")
-converted_date = convert_date(os.getenv("FROM_DATE", "7days"))
-DATE_RANGE = set_default_cutoff_dates(TO_DATE, converted_date)
+# The API date search runs on a creation date it does not return, not on
+# submitted_at: query a wide range, then filter on submitted_at ourselves
+QUERY_DATE_RANGE = set_default_cutoff_dates(TO_DATE, convert_date(os.getenv("QUERY_DATE_RANGE", "360days")))
+FILTER_DATE_RANGE = set_default_cutoff_dates(TO_DATE, convert_date(os.getenv("FROM_DATE", "7days")))
+
+REQUEST_TYPE = json.loads(os.getenv("REQUEST_TYPE", "null"))
 
 
 # -----------------------------------------------------------------------------#
@@ -104,8 +109,14 @@ if __name__ == "__main__":
     export_summary = args.export_summary
 
     # Let's get this party started.
-    service_requests = get_service_requests(BASE_URL,HEADERS, CORE_ID,DATE_RANGE)
+    service_requests = get_service_requests(BASE_URL,HEADERS, CORE_ID,QUERY_DATE_RANGE)
+    queried = len(service_requests)
+    service_requests = filter_by_submitted_date(service_requests, FILTER_DATE_RANGE)
+    print(f"Queried {queried} requests, {len(service_requests)} submitted in the filter range")
     service_requests = add_forms(service_requests,HEADERS)
+    if export_requests:
+            with open(f"{outfile}_all_requests.json",'w') as f:
+                json.dump(service_requests, f)
     service_requests = sort_service_requests(service_requests) 
 
     sorted_df = format_response(service_requests)
@@ -116,5 +127,5 @@ if __name__ == "__main__":
     if export_summary:
         sorted_df.to_csv(f"{outfile}_summary.csv", index=False)
     if build_report:
-        convert_sr_to_md(service_requests, outfile)
+        convert_sr_to_md(service_requests, outfile, REQUEST_TYPE)
         convert_md_to_ppt(f"{outfile}.md", f"{outfile}.pptx")

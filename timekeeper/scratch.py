@@ -6,6 +6,7 @@ import json
 import os
 import requests
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -39,8 +40,6 @@ DATE_RANGE = set_default_cutoff_dates(TO_DATE, converted_date)
 
 FILTER_CRITERIA = json.loads(os.getenv("FILTER_CRITERIA", "{}"))
 
-rt = os.getenv("REQUEST_TYPE")
-REQUEST_TYPE = json.loads(rt) if rt else ["new"]
 
 # -----------------------------------------------------------------------------#
 # DEFINE ILAB HEADERS
@@ -54,6 +53,40 @@ HEADERS = {
 # -----------------------------------------------------------------------------#
 # DEFINE SEARCH
 # -----------------------------------------------------------------------------#
+# Read-only: everything below is a GET
+SR_URL = f"{BASE_URL}/{CORE_ID}/service_requests"
+MAX_PAGES = 50
+DAYS = 14
+
+
+def fetch(label: str, **params) -> list | None:
+    """Every page of service requests for these query params; None if the API refuses them"""
+    all_requests, seen, page = [], set(), 1
+    print(f"\n[{label}] params={params}")
+    while page <= MAX_PAGES:
+        response = requests.get(f"{SR_URL}.json", headers=HEADERS, params={"page": page, **params})
+        if not response.ok:
+            print(f"    HTTP {response.status_code}: {response.text[:200]}")
+            return None
+        body = response.json()
+        batch = trim_response(body, "service_requests")
+        if page == 1:
+            print(f"    metadata: {body['ilab_response'].get('ilab_metadata')}")
+        ids = {sr["id"] for sr in batch}
+        # Stop on an empty page, or if the API starts repeating itself
+        if not batch or ids <= seen:
+            break
+        print(f"    page {page}: {len(batch)} requests")
+        seen |= ids
+        all_requests.extend(batch)
+        page += 1
+    print(f"    total: {len(all_requests)}")
+    return all_requests
+
+
+def submitted(service_request: dict) -> datetime | None:
+    value = service_request.get("submitted_at")
+    return datetime.fromisoformat(value).astimezone(timezone.utc) if value else None
 
 
 # -----------------------------------------------------------------------------#
@@ -87,79 +120,74 @@ if __name__ == "__main__":
     args = parse_args()
     outfile = args.outfile
 
-    # Get all cores
-    all_cores_url = f"{BASE_URL}"
-    ac = requests.get(
-            url = all_cores_url,
-            headers=HEADERS,
-        )
-    ac.raise_for_status()
-    ac_resp = ac.json()
-    with open("data/core_test.json", 'w') as f:
-        json.dump(ac_resp,f)
+    now = datetime.now(timezone.utc)
+    cut = now - timedelta(days=DAYS)
+    tomorrow = now + timedelta(days=1)
+    doc_format = "%Y-%m-%dT%H:%MZ"  # as in the API doc example
+    print(f"now (UTC) = {now:%Y-%m-%d %H:%M}   {DAYS} days ago = {cut:%Y-%m-%d %H:%M}")
 
-    # Get single core
-    s_cores_url = f"{BASE_URL}/{CORE_ID}"
-    sc = requests.get(
-            url = s_cores_url,
-            headers=HEADERS,
-        )
-    sc.raise_for_status()
-    sc_resp = sc.json()
-    with open("data/single_cores_test.json", 'w') as s:
-        json.dump(sc_resp,s)
+    # Same question (last 14 days) asked in different ways; ALL is the ground truth
+    experiments = {
+        "ALL": {},
+        "ALL+pp": {"per_page": 30},
+        "TK": {"per_page": 30, **DATE_RANGE},  # exactly what timekeeper.py sends
+        "TK14": {"from_date": cut.isoformat(timespec="milliseconds"),
+                 "to_date": tomorrow.isoformat(timespec="milliseconds")},
+        "DOC": {"from_date": cut.strftime(doc_format), "to_date": tomorrow.strftime(doc_format)},
+        "DOCfrom": {"from_date": cut.strftime(doc_format)},
+        "DAY": {"from_date": cut.strftime("%Y-%m-%d")},
+    }
+    results = {label: fetch(label, **params) for label, params in experiments.items()}
 
-    # # Get services
-    sr_cores_url = f"{BASE_URL}/{CORE_ID}/services.json"
-    sr = requests.get(
-            url = sr_cores_url,
-            headers=HEADERS,
-        )
-    sr.raise_for_status()
-    sr_resp = sr.json()
-    with open("data/service_list.json", 'w') as r:
-        json.dump(sr_resp,r)
+    everything = results["ALL"] or []
+    by_id = {sr["id"]: sr for sr in everything}
+    expected = {i for i, sr in by_id.items() if submitted(sr) and submitted(sr) >= cut}
+    print(f"\n=== requests with submitted_at in the last {DAYS} days (from ALL): {len(expected)} ===")
+    print(f"    requests in ALL without submitted_at: {sum(1 for sr in everything if not submitted(sr))}")
 
-    # # Get equipment
-    eq_cores_url = f"{BASE_URL}/{CORE_ID}/equipment.json"
-    eq = requests.get(
-            url = eq_cores_url,
-            headers=HEADERS,
-        )
-    eq.raise_for_status()
-    eq_resp = eq.json()
-    with open("data/equipment_list.json", 'w') as e:
-        json.dump(eq_resp,e)
+    labels = [label for label in experiments if label not in ("ALL", "ALL+pp")]
+    got = {label: {sr["id"] for sr in results[label]} if results[label] is not None else None for label in labels}
+    for label in labels:
+        if got[label] is None:
+            print(f"  {label:8s} refused by the API")
+            continue
+        print(f"  {label:8s} returned {len(got[label]):3d} | missing {sorted(expected - got[label])}"
+              f" | unexpected {sorted(got[label] - expected)}")
 
-    # # Get service requests
-    srl_cores_url = f"{BASE_URL}/{CORE_ID}/service_requests.json"
-    srl = requests.get(
-            url = srl_cores_url,
-            headers=HEADERS,
-        )
-    srl.raise_for_status()
-    srl_resp = srl.json()
-    with open("data/service_request_list_postsub.json", 'w') as sr:
-        json.dump(srl_resp,sr)
+    # Everything from the last 30 days, newest first, with who returned it
+    print(f"\n{'id':>8} {'submitted_at (UTC)':19} {'days':>5}  " + " ".join(f"{label:7s}" for label in labels) + " state / service")
+    recent = [sr for sr in everything if submitted(sr) and submitted(sr) >= now - timedelta(days=30)]
+    for sr in sorted(recent, key=submitted, reverse=True):
+        age = (now - submitted(sr)).total_seconds() / 86400
+        marks = " ".join(f"{'-' if got[label] is None else 'x' if sr['id'] in got[label] else '.':7s}" for label in labels)
+        print(f"{sr['id']:>8} {submitted(sr):%Y-%m-%d %H:%M}    {age:5.1f}  {marks} {sr['state']} / {sr['service_name']}")
 
-    # # testing updates to request
-    # # hard coded for now 
-    # put_url = "https://api-eu.ilabsolutions.com/v1/cores/3655/service_requests/959258.json"
-    # put = requests.put(
-    #     url = put_url,
-    #     headers=HEADERS,
-    #     json={"service_request": {"state": "completed"}})
-    # print("Status Code:", put.status_code)
+    # Which date is the window keyed on? Some requests carry a submitted_at that
+    # does not match when they were created (their id sits among later requests)
+    probes = {
+        "around submitted_at of 858962": {"from_date": "2021-05-01T00:00Z", "to_date": "2021-07-01T00:00Z"},
+        "around id-neighbours of 858962": {"from_date": "2025-04-15T00:00Z", "to_date": "2025-06-01T00:00Z"},
+        "around submitted_at of 918187": {"from_date": "2026-01-25T00:00Z", "to_date": "2026-02-05T00:00Z"},
+        "around id-neighbours of 918187": {"from_date": "2026-02-19T00:00Z", "to_date": "2026-03-05T00:00Z"},
+    }
+    for label, params in probes.items():
+        found = fetch(label, **params) or []
+        for sr in found:
+            print(f"    -> {sr['id']} submitted_at={submitted(sr):%Y-%m-%d %H:%M} {sr['state']}")
+    print("\nALL, ids in the order returned:", [sr["id"] for sr in everything])
 
-    # print("Response Body:", put.content.decode())
-    
-    # testing reformat for table insertion
-    FIELDS = ['name','id','state','submitted_at','start_on','end_on','assigned_to','service_name','owner.name']
-    serv = trim_response(srl_resp, 'service_requests')
-    df = format_response(serv,fields=FIELDS)
-    import pdb; pdb.set_trace()
-    
-    
-    
-        
-    
+    # Does a single request expose more dates (created_at, updated_at) than the list does?
+    if everything:
+        newest = max((sr for sr in everything if submitted(sr)), key=submitted)
+        response = requests.get(f"{SR_URL}/{newest['id']}.json", headers=HEADERS)
+        print(f"\nsingle request {newest['id']}: HTTP {response.status_code}")
+        if response.ok:
+            inner = response.json()["ilab_response"]
+            for key, value in inner.items():
+                if isinstance(value, dict):
+                    print(f"  '{key}' keys: {sorted(value)}")
+                    print("  date-like:", {k: v for k, v in value.items() if k.endswith(("_at", "_on"))})
+
+    if outfile:
+        with open(outfile, 'w') as f:
+            json.dump(results, f)
