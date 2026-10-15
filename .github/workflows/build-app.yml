@@ -1,0 +1,31 @@
+# Builds the Timekeeper app for macOS and Windows.
+# Run it from the Actions tab ("Run workflow"), then download the files from the run page.
+name: Build app
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            build: ./build_app.sh
+            artifact: timekeeper/dist/Timekeeper-mac.zip
+          - os: windows-latest
+            build: uv sync && uv run pyinstaller --noconfirm --windowed --onefile --name Timekeeper app.py
+            artifact: timekeeper/dist/Timekeeper.exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: timekeeper
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: ${{ matrix.build }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Timekeeper-${{ runner.os }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error

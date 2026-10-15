@@ -1,32 +1,26 @@
 [project]
 name = "timekeeper"
 version = "0.1.0"
-description = "Timekeeper - nightly pull from iLAB"
+description = "Timekeeper - build the core meeting slides and summary csv from iLAB"
 requires-python = ">=3.13"
 
 dependencies = [
     "requests",
-    "python-dotenv",
     "pandas",
+    "python-dateutil",
     "python-pptx",
+    "keyring",
 ]
 
 [dependency-groups]
 dev = [
-    "seaborn",
-    "jupyterlab",
-    "ipython",
-    "ipykernel",
-    "ruff",
-    "detect-secrets",
-    "pre-commit",
-    "pytest",
-    "pytest-cov",
-    "responses",
+    "pyinstaller",
 ]
 
 [tool.uv]
 package = false
+# uv's own Python builds ship with Tkinter (not every system Python does)
+python-preference = "only-managed"
 
 [tool.ruff]
 target-version = "py313"

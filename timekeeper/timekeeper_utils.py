@@ -282,7 +282,8 @@ def convert_sr_to_md(sorted_requests: dict, outfile: str = "file_out", bins: lis
     """Write sort_service_requests output to md: one '#' slide per request.
     bins: which bins to write, in that order; all of them if None"""
     in_subtitle = ("name", "owner.name", "state", "assigned_to")
-    with open(f"{outfile}.md", "w") as f:
+    # utf-8 explicitly: build_ppt reads it back as utf-8, and Windows defaults to cp1252
+    with open(f"{outfile}.md", "w", encoding="utf-8") as f:
         for bucket in bins or sorted_requests:
             for sr in sorted_requests[bucket]:
                 f.write(f"# {bucket.replace('_', ' ').capitalize()}\n")

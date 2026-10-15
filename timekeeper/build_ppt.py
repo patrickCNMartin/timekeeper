@@ -138,11 +138,12 @@ def add_title_slide(prs: Presentation, title: str, subtitle: str = ""):
     run.font.color.rgb = THEME["text_light"]
     run.font.name = "Helvetica"
 
-    if subtitle:
+    # One paragraph per subtitle line
+    for line in subtitle.splitlines():
         p2 = tf.add_paragraph()
         p2.alignment = PP_ALIGN.LEFT
         r2 = p2.add_run()
-        r2.text = subtitle
+        r2.text = line
         r2.font.size = Pt(20)
         r2.font.color.rgb = RGBColor(0xCA, 0xDC, 0xFC)
         r2.font.name = "Helvetica"
@@ -363,7 +364,7 @@ def _style_paragraph(
             run.font.color.rgb = color
 
 
-def convert_md_to_ppt(md_path: str, out_path: str):
+def convert_md_to_ppt(md_path: str, out_path: str, core_name: str = ""):
     print(f"Convert to ppt: {out_path}")
     with open(md_path, "r", encoding="utf-8") as f:
         md_text = f.read()
@@ -377,6 +378,8 @@ def convert_md_to_ppt(md_path: str, out_path: str):
     # Hardcoded for now since I don't know how much flexibility
     # we will actually need here.
     subtitle = date.today().strftime("%B %d, %Y")
+    if core_name:
+        subtitle = f"{core_name}\n{subtitle}"
     add_title_slide(prs, "Core Meeting", subtitle)
 
     for slide_data in slides_data:
