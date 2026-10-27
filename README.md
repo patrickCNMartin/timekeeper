@@ -67,12 +67,18 @@ Fill in the window, then click **Build report**.
 | **Core ID** | Your core's iLab ID (a number). |
 | **Save to** | The folder for the files. Click **Browse…** to choose one. |
 | **Last (days)** | Include requests submitted in this many days, counting back from today. |
+| **Also save the full iLab pull (.json)** | Off by default. Tick it to also get a `.json` file with everything iLab has on those requests (see below). |
 
 The box at the bottom shows progress. Most runs take under a minute, but more requests
-take longer. When it's done you'll find two files in your folder:
+take longer. When it's done you'll find these files in your folder:
 
 - `core_meeting_YYYY-MM-DD.pptx`
 - `core_meeting_YYYY-MM-DD.csv`
+- `core_meeting_YYYY-MM-DD.json`, only if the box is ticked. It's the raw data behind
+  the report: every request submitted in those days, with all the fields iLab returns,
+  including the answers on its custom forms and its milestones. Unlike the slides and
+  the table, it also includes requests that don't fit any of the meeting's groups.
+  It contains requesters' details and form answers, so share it with care.
 
 Running it again on the same day replaces them.
 

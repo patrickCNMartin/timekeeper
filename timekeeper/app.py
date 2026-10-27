@@ -29,6 +29,8 @@ DEFAULTS = {
     "core_id": "",
     "out_dir": str(Path.home() / "Documents"),
     "days": "14",
+    # Checkbox: "1" also saves the full iLab pull as json
+    "save_json": "0",
 }
 
 
@@ -133,13 +135,20 @@ class App:
         ttk.Button(frame, text="Browse…", command=self.browse).grid(
             row=3, column=2, padx=(6, 0)
         )
+        ttk.Checkbutton(
+            frame,
+            text="Also save the full iLab pull (.json)",
+            variable=self.fields["save_json"],
+            onvalue="1",
+            offvalue="0",
+        ).grid(row=5, column=1, sticky="w", pady=3)
 
         self.button = ttk.Button(frame, text="Build report", command=self.build)
-        self.button.grid(row=5, column=0, columnspan=3, pady=(12, 8))
+        self.button.grid(row=6, column=0, columnspan=3, pady=(12, 8))
 
         self.log = tk.Text(frame, height=8, width=60, state="disabled", wrap="word")
-        self.log.grid(row=6, column=0, columnspan=3, sticky="nsew")
-        frame.rowconfigure(6, weight=1)
+        self.log.grid(row=7, column=0, columnspan=3, sticky="nsew")
+        frame.rowconfigure(7, weight=1)
 
         self.poll()
 
@@ -170,16 +179,16 @@ class App:
         """Runs on the build thread: never touches the window directly"""
         with contextlib.redirect_stdout(QueueWriter(self.messages)):
             try:
-                pptx, csv = run_report(
+                saved = run_report(
                     settings["api_key"],
                     settings["core_id"],
                     settings["core_name"],
                     settings["out_dir"],
                     int(settings["days"]),
+                    save_json=settings["save_json"] == "1",
                 )
-                self.messages.put(
-                    ("done", f"\nSaved {pptx.name} and {csv.name}\nin {pptx.parent}\n")
-                )
+                names = ", ".join(path.name for path in saved)
+                self.messages.put(("done", f"\nSaved {names}\nin {saved[0].parent}\n"))
             except Exception as error:
                 self.messages.put(("error", explain(error)))
 

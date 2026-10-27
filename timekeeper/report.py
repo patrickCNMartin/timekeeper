@@ -1,6 +1,7 @@
 # -----------------------------------------------------------------------------#
 # IMPORT LIBS
 # -----------------------------------------------------------------------------#
+import json
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -33,10 +34,16 @@ QUERY_DAYS = 360
 # REPORT
 # -----------------------------------------------------------------------------#
 def run_report(
-    api_key: str, core_id: str, core_name: str, out_dir: str, days: int
-) -> tuple[Path, Path]:
+    api_key: str,
+    core_id: str,
+    core_name: str,
+    out_dir: str,
+    days: int,
+    save_json: bool = False,
+) -> list[Path]:
     """Pull the requests submitted in the last `days` days and save them as
-    <out_dir>/core_meeting_<today>.pptx and .csv"""
+    <out_dir>/core_meeting_<today>.pptx and .csv, plus .json if save_json.
+    Returns the paths written"""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -61,4 +68,14 @@ def run_report(
         md_stem = Path(tmp) / "report"
         convert_sr_to_md(sorted_requests, str(md_stem))
         convert_md_to_ppt(f"{md_stem}.md", str(pptx_path), core_name)
-    return pptx_path, csv_path
+
+    saved = [pptx_path, csv_path]
+    if save_json:
+        # Everything iLab returned for these requests, forms and milestones included,
+        # also the ones no bin takes (those are left out of the slides and csv)
+        json_path = out.with_suffix(".json")
+        json_path.write_text(
+            json.dumps(service_requests, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        saved.append(json_path)
+    return saved

@@ -18,7 +18,8 @@ platform. For how to *use* the app, see the [main README](../README.md).
 
 ## How a report is built
 
-`run_report(api_key, core_id, core_name, out_dir, days)` in `report.py`:
+`run_report(api_key, core_id, core_name, out_dir, days, save_json=False)` in
+`report.py`:
 
 1. **Query a wide range.** iLab's date filter works on a creation date that the API
    doesn't return, not on `submitted_at`. So the query covers `max(QUERY_DAYS, days)`
@@ -32,9 +33,14 @@ platform. For how to *use* the app, see the [main README](../README.md).
    empty `REPORT_METRICS` columns for people to fill in.
 6. **Write the slides.** `convert_sr_to_md` writes markdown to a temp folder, and
    `convert_md_to_ppt` turns it into the `.pptx`.
+7. **Optionally write the full pull** (`save_json=True`, the window's checkbox). This
+   is the request list from step 3 as JSON: iLab's full service-request records, each
+   with the `forms` and `milestones` that `add_forms` attached. It includes requests
+   that match no rule, so it can hold more than the CSV. It's the same data the old
+   CLI's `--export_request` wrote to `*_all_requests.json`.
 
-Output names are `core_meeting_YYYY-MM-DD.pptx` and `.csv`. Running again on the same
-day overwrites them.
+Output names are `core_meeting_YYYY-MM-DD.pptx`, `.csv` and `.json`. `run_report`
+returns the paths it wrote. Running again on the same day overwrites them.
 
 The window runs `run_report` on a background thread. Its `print()` progress goes into
 a queue through `contextlib.redirect_stdout`, and the main thread shows it in the log
@@ -49,7 +55,8 @@ box. Two consequences:
   [keyring](https://pypi.org/project/keyring/), under service `timekeeper` and user
   `ilab_api_key`. That's Keychain on macOS and Credential Manager on Windows. The app
   never writes the key to a file.
-- **Everything else** (core name, core ID, folder, days) goes in `~/.timekeeper.json`.
+- **Everything else** (core name, core ID, folder, days, the JSON checkbox) goes in
+  `~/.timekeeper.json`.
 - **Nothing core-specific is committed.** Core name and ID start blank.
 - **Settings are saved when Build is clicked,** before the pull runs. A wrong key stays
   saved until it's corrected.
