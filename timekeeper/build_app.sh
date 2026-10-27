@@ -12,7 +12,7 @@ unset UV_PYTHON VIRTUAL_ENV
 export PATH="$HOME/.local/bin:$PATH"
 if ! command -v uv >/dev/null; then
     echo "Installing uv into ~/.local/bin"
-    curl -LsSf https://astral.sh/uv/0.12.17/install.sh \
+    curl -LsSf https://astral.sh/uv/install.sh \
         | env UV_INSTALL_DIR="$HOME/.local/bin" UV_NO_MODIFY_PATH=1 sh
 fi
 

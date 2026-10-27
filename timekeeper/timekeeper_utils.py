@@ -79,56 +79,55 @@ PREVIOUS_REQUEST_FIELD = (
 NEW_SAMPLES_FIELD = "Number of samples:"
 
 
-# One rule per bin: what it takes for a service request to belong there
-def is_draft(service_request: dict) -> bool:
-    return 'draft' in service_request['state']
-
-def is_cancelled(service_request: dict) -> bool:
-    # Cancelled, or rejected (by the core, in disagreement, or on financials)
-    return service_request['state'] in ('cancelled', 'core_disagreement', 'disagreement', 'financials_rejected')
-
 def is_processing(service_request: dict) -> bool:
     return service_request['state'] == 'processing'
 
 def is_completed(service_request: dict) -> bool:
     return service_request['state'] == 'completed'
 
-def is_unassigned_meeting(service_request: dict) -> bool:
-    return service_request['service_name'] == STARTUP_MEETING and not service_request['assigned_to']
+def is_new_meeting(
+    service_request: dict, 
+    service_type: str = STARTUP_MEETING
+) -> bool:
+    return service_request['service_name'] == service_type and not service_request['assigned_to']
 
-def is_assigned_meeting(service_request: dict) -> bool:
-    return service_request['service_name'] == STARTUP_MEETING and bool(service_request['assigned_to'])
+def is_assigned_meeting(
+    service_request: dict,
+    service_type: str = STARTUP_MEETING
+) -> bool:
+    return service_request['service_name'] == service_type and bool(service_request['assigned_to'])
 
-def is_unassigned_supplementary_samples(service_request: dict) -> bool:
-    return service_request['service_name'] == SUPPLEMENTARY_SAMPLE and not service_request['assigned_to']
+def is_supplementary_samples(
+    service_request: dict,
+    service_type: str = SUPPLEMENTARY_SAMPLE
+) -> bool:
+    return service_request['service_name'] == service_type and not service_request['assigned_to']
 
-def is_assigned_supplementary_samples(service_request: dict) -> bool:
-    return service_request['service_name'] == SUPPLEMENTARY_SAMPLE and bool(service_request['assigned_to'])
+def is_supplementary_samples_request(
+    service_request: dict,
+    service_type: str = SUPPLEMENTARY_SAMPLE
+) -> bool:
+    return service_request['service_name'] == service_type and bool(service_request['assigned_to'])
 
 
-# Checked top to bottom, first match wins: (bin, rule, form to pull)
-# State rules sit above the service rules so e.g. a rejected meeting is 'cancelled'
+
 RULES = [
-    ('drafts', is_draft, None),
-    ('cancelled', is_cancelled, None),
     ('processing', is_processing, None),
     ('completed', is_completed, None),
-    ('startup_meeting_unassigned', is_unassigned_meeting, "Start-up Meeting Request form"),
-    ('startup_meeting_assigned', is_assigned_meeting, "Start-up Meeting Request form"),
-    ('supplementary_sample_assigned', is_assigned_supplementary_samples, "Additional Sample Submission Form"),
-    ('supplementary_sample_unassigned', is_unassigned_supplementary_samples, "Additional Sample Submission Form"),
+    ('startup_meeting_request', is_new_meeting, "Start-up Meeting Request form"),
+    ('startup_meeting', is_assigned_meeting, "Start-up Meeting Request form"),
+    ('supplementary_sample', is_supplementary_samples, "Additional Sample Submission Form"),
+    ('supplementary_sample_request', is_supplementary_samples_request, "Additional Sample Submission Form"),
 ]
 
 # Bins in output order (json, csv and slides)
 BINS = [
-    'drafts',
-    'startup_meeting_unassigned',
-    'startup_meeting_assigned',
-    'supplementary_sample_assigned',
-    'supplementary_sample_unassigned',
+    'startup_meeting_request',
+    'startup_meeting',
+    'supplementary_sample',
+    'supplementary_sample_request',
     'processing',
-    'completed',
-    'cancelled',
+    'completed'
 ]
 
 
@@ -156,11 +155,16 @@ def get_base_fields(d: dict, fields: list[str] = FIELDS) -> dict:
 
 def extract_forms(service_requests:dict, form: str)-> dict:
     """Field name -> value for the named form; empty if the request has no such form"""
-    return {
-        field["name"]: field["value"]
-        for f in service_requests["forms"] if f["name"] == form
-        for field in f["fields"]
-    }
+    output = {}
+    for f in service_requests["forms"]:
+        if f["name"] == form:
+            for field in f["fields"]:
+                if "value" in field:
+                    output[field["name"]] = field["value"]
+                # else:
+                #     import pdb;pdb.set_trace()
+    return output
+    
 
 
 def get_custom_forms(service_request, headers, form="all"):
@@ -281,6 +285,7 @@ BULLET_LABELS = {PREVIOUS_REQUEST_FIELD: "Previous request"}
 def convert_sr_to_md(sorted_requests: dict, outfile: str = "file_out", bins: list[str] | None = None):
     """Write sort_service_requests output to md: one '#' slide per request.
     bins: which bins to write, in that order; all of them if None"""
+    print(f"Converting Service Request to markdown")
     in_subtitle = ("name", "owner.name", "state", "assigned_to")
     # utf-8 explicitly: build_ppt reads it back as utf-8, and Windows defaults to cp1252
     with open(f"{outfile}.md", "w", encoding="utf-8") as f:

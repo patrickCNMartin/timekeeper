@@ -56,11 +56,20 @@ def run_report(
     service_requests = filter_by_submitted_date(service_requests, filter_range)
     print(f"Queried {queried} requests, {len(service_requests)} submitted in the last {days} days")
     service_requests = add_forms(service_requests, headers)
-    sorted_requests = sort_service_requests(service_requests)
-
     out = Path(out_dir) / f"core_meeting_{date.today():%Y-%m-%d}"
     csv_path = out.with_suffix(".csv")
     pptx_path = out.with_suffix(".pptx")
+    json_path = out.with_suffix(".json")
+    if save_json:
+        # Everything iLab returned for these requests, forms and milestones included,
+        # also the ones no bin takes (those are left out of the slides and csv).
+        # Saved before sorting so it is there even if a later step fails
+        json_path.write_text(
+            json.dumps(service_requests, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        print(f"Saved the iLab pull to {json_path.name}")
+    sorted_requests = sort_service_requests(service_requests)
+
     # utf-8-sig so Excel shows accented names correctly
     format_response(sorted_requests).to_csv(csv_path, index=False, encoding="utf-8-sig")
     # The slides are built from an intermediate md that we don't keep
@@ -71,11 +80,5 @@ def run_report(
 
     saved = [pptx_path, csv_path]
     if save_json:
-        # Everything iLab returned for these requests, forms and milestones included,
-        # also the ones no bin takes (those are left out of the slides and csv)
-        json_path = out.with_suffix(".json")
-        json_path.write_text(
-            json.dumps(service_requests, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
         saved.append(json_path)
     return saved
